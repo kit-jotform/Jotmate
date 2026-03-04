@@ -1,0 +1,34 @@
+use chrono::NaiveDate;
+use std::path::PathBuf;
+
+use crate::time::api::StatsResponse;
+
+pub fn week_cache_path(company_id: &str, monday: NaiveDate) -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from("~/.cache"))
+        .join("jotmate")
+        .join("time")
+        .join(company_id)
+        .join(format!("{}.json", monday.format("%Y-%m-%d")))
+}
+
+pub fn read_week_cache(company_id: &str, monday: NaiveDate) -> Option<StatsResponse> {
+    let path = week_cache_path(company_id, monday);
+    if !path.exists() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+pub fn write_week_cache(company_id: &str, monday: NaiveDate, stats: &StatsResponse) {
+    let path = week_cache_path(company_id, monday);
+    if let Some(parent) = path.parent() {
+        if std::fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+    if let Ok(content) = serde_json::to_string(stats) {
+        let _ = std::fs::write(&path, content);
+    }
+}
