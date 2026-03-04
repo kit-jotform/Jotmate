@@ -1,4 +1,4 @@
-use chrono::{Datelike, Local, NaiveDate, Weekday};
+use chrono::{Datelike, Local, NaiveDate};
 
 use crate::config::ContractPeriod;
 

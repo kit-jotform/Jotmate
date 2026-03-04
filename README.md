@@ -4,22 +4,16 @@ Jotform developer productivity CLI — syncs forks with upstream and tracks Time
 
 ## Installation
 
-### Local (dev)
-
 ```sh
-cargo install --path .
+cargo build --release
+sudo cp target/release/jotmate /usr/local/bin/
 ```
 
-### Global (from release)
+Or without sudo (user-only):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kit-jotform/Jotmate/main/install.sh | sh
-```
-
-Installs to `~/.local/bin` by default. For a system-wide install:
-
-```sh
-./install.sh --prefix /usr/local
+cargo build --release
+cp target/release/jotmate ~/.local/bin/
 ```
 
 ## Usage
@@ -66,9 +60,3 @@ github_base = "/Users/you/Documents/Github"
 
 TimeDoctor credentials are stored in the system keychain (macOS Keychain / Linux secret-service).
 
-## Building from source
-
-```sh
-cargo build --release
-# binary at: target/release/jotmate
-```

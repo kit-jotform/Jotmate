@@ -1,11 +1,9 @@
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use tokio::sync::mpsc;
 
 #[derive(Debug)]
 pub enum AppEvent {
     OutputLine(String),
     CommandFinished(i32),
-    Tick,
 }
 
 pub fn poll_crossterm_event() -> Option<Event> {
@@ -69,7 +67,6 @@ pub fn handle_key(
             KeyCode::Backspace if app.settings.editing => app.settings.handle_backspace(),
             _ => {}
         },
-        AppState::Quitting => {}
     }
 
     false
@@ -89,7 +86,6 @@ pub fn handle_app_event(app: &mut crate::tui::app::App, event: AppEvent) {
             app.append_output_line("Press q or Esc to return to menu".to_string());
             app.mark_command_finished();
         }
-        AppEvent::Tick => {}
     }
 }
 

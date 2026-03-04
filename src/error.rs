@@ -2,9 +2,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("Configuration error: {0}")]
-    Config(String),
-
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -16,12 +13,6 @@ pub enum AppError {
 
     #[error("Token expired — re-authentication required")]
     TokenExpired,
-
-    #[error("Repository discovery failed: {0}")]
-    RepoDiscovery(String),
-
-    #[error("Sync script error (exit code {0})")]
-    SyncScript(i32),
 
     #[error("Keyring error: {0}")]
     Keyring(String),

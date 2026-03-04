@@ -15,7 +15,6 @@ pub enum AppState {
         finished: bool,
     },
     Settings,
-    Quitting,
 }
 
 pub struct App {
@@ -25,13 +24,19 @@ pub struct App {
     pub output_scroll: usize,
     pub settings: SettingsFormState,
     pub config: Config,
+    pub logo_ansi: Vec<String>,
 }
 
-pub const MENU_ITEMS: &[&str] = &[
-    "  Sync Repos",
-    "  Check Time",
-    "⚙  Settings",
-    "✕  Quit",
+pub struct MenuItem {
+    pub name: &'static str,
+    pub description: &'static str,
+}
+
+pub const MENU_ITEMS: &[MenuItem] = &[
+    MenuItem { name: "Sync",         description: "Sync repos to upstream" },
+    MenuItem { name: "Time Doctor",  description: "Track your work hours" },
+    MenuItem { name: "Settings",     description: "Configure jotmate" },
+    MenuItem { name: "Exit",         description: "" },
 ];
 
 impl App {
@@ -44,6 +49,7 @@ impl App {
             output_scroll: 0,
             settings,
             config,
+            logo_ansi: Vec::new(),
         }
     }
 
@@ -83,9 +89,5 @@ impl App {
         if let AppState::Running { ref mut finished, .. } = self.state {
             *finished = true;
         }
-    }
-
-    pub fn is_command_running(&self) -> bool {
-        matches!(self.state, AppState::Running { finished: false, .. })
     }
 }
