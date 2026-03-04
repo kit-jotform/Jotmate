@@ -1,0 +1,181 @@
+use anyhow::{Context, Result};
+use chrono::NaiveDate;
+use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
+use std::path::PathBuf;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Config {
+    #[serde(default)]
+    pub sync: SyncConfig,
+    #[serde(default)]
+    pub time: TimeConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SyncConfig {
+    /// Default projects to sync when --only is not passed
+    pub default_only: Option<Vec<String>>,
+    /// If true, run with --sync-all by default
+    #[serde(default)]
+    pub default_sync_all: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TimeConfig {
+    pub email: Option<String>,
+    pub company_id: Option<String>,
+    pub timezone: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    #[serde(default = "default_true")]
+    pub skip_current_week: bool,
+    pub contract_periods: Option<Vec<ContractPeriod>>,
+    pub reset_cumulative_from_date: Option<NaiveDate>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContractPeriod {
+    pub from: NaiveDate,
+    pub weekly_hours: f64,
+}
+
+pub fn config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("~/.config"))
+        .join("jotmate")
+        .join("config.toml")
+}
+
+pub fn load() -> Result<Config> {
+    let path = config_path();
+    if !path.exists() {
+        return Ok(Config::default());
+    }
+    let content = std::fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read config from {}", path.display()))?;
+    let config: Config = toml::from_str(&content)?;
+    Ok(config)
+}
+
+pub fn save(config: &Config) -> Result<()> {
+    let path = config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create config directory {}", parent.display()))?;
+    }
+    let content = toml::to_string_pretty(config)?;
+    std::fs::write(&path, content)
+        .with_context(|| format!("Failed to write config to {}", path.display()))?;
+    Ok(())
+}
+
+/// Prompts for any missing TimeConfig fields interactively. Saves config before returning.
+pub fn ensure_time_credentials(config: &mut Config) -> Result<()> {
+    let mut changed = false;
+
+    if config.time.email.is_none() {
+        let email = prompt("TimeDoctor email")?;
+        config.time.email = Some(email);
+        changed = true;
+    }
+
+    if config.time.company_id.is_none() {
+        let id = prompt("TimeDoctor company ID")?;
+        config.time.company_id = Some(id);
+        changed = true;
+    }
+
+    if config.time.timezone.is_none() {
+        let tz = prompt_with_default("Timezone", "Europe/Istanbul")?;
+        config.time.timezone = Some(tz);
+        changed = true;
+    }
+
+    if config.time.start_date.is_none() {
+        loop {
+            let s = prompt("Start date (YYYY-MM-DD)")?;
+            match NaiveDate::parse_from_str(&s, "%Y-%m-%d") {
+                Ok(d) => {
+                    config.time.start_date = Some(d);
+                    changed = true;
+                    break;
+                }
+                Err(_) => eprintln!("Invalid date format. Please use YYYY-MM-DD."),
+            }
+        }
+    }
+
+    if config.time.contract_periods.is_none() {
+        println!("Enter contract periods (e.g. 2025-11-17:20,2026-02-02:28)");
+        println!("Format: YYYY-MM-DD:HOURS[,YYYY-MM-DD:HOURS,...]");
+        loop {
+            let s = prompt("Contract periods")?;
+            match parse_contract_periods(&s) {
+                Ok(periods) => {
+                    config.time.contract_periods = Some(periods);
+                    changed = true;
+                    break;
+                }
+                Err(e) => eprintln!("Error: {e}"),
+            }
+        }
+    }
+
+    if changed {
+        save(config)?;
+        println!("Configuration saved to {}", config_path().display());
+    }
+
+    Ok(())
+}
+
+fn prompt(label: &str) -> Result<String> {
+    print!("{label}: ");
+    io::stdout().flush()?;
+    let mut buf = String::new();
+    io::stdin().read_line(&mut buf)?;
+    Ok(buf.trim().to_string())
+}
+
+fn prompt_with_default(label: &str, default: &str) -> Result<String> {
+    print!("{label} [{default}]: ");
+    io::stdout().flush()?;
+    let mut buf = String::new();
+    io::stdin().read_line(&mut buf)?;
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(trimmed.to_string())
+    }
+}
+
+pub fn parse_contract_periods(s: &str) -> Result<Vec<ContractPeriod>> {
+    let mut periods = Vec::new();
+    for entry in s.split(',') {
+        let entry = entry.trim();
+        let parts: Vec<&str> = entry.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Invalid contract period '{}': expected YYYY-MM-DD:HOURS", entry);
+        }
+        let from = NaiveDate::parse_from_str(parts[0].trim(), "%Y-%m-%d")
+            .with_context(|| format!("Invalid date '{}'", parts[0]))?;
+        let weekly_hours: f64 = parts[1]
+            .trim()
+            .parse()
+            .with_context(|| format!("Invalid hours '{}'", parts[1]))?;
+        if weekly_hours < 0.0 {
+            anyhow::bail!("Hours cannot be negative: {}", weekly_hours);
+        }
+        periods.push(ContractPeriod { from, weekly_hours });
+    }
+    if periods.is_empty() {
+        anyhow::bail!("No contract periods provided");
+    }
+    periods.sort_by_key(|p| p.from);
+    Ok(periods)
+}
