@@ -15,6 +15,9 @@ pub enum Commands {
     Time(TimeArgs),
     /// Edit default flags and credentials
     Settings,
+    /// Print the embedded ANSI icon (internal use)
+    #[command(hide = true, name = "_icon")]
+    Icon,
 }
 
 #[derive(Args, Clone, Debug, Default)]

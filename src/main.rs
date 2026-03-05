@@ -23,6 +23,9 @@ async fn main() -> Result<()> {
         Some(Commands::Settings) => {
             tui::run_settings().await?;
         }
+        Some(Commands::Icon) => {
+            print!("{}", include_str!("../assets/icon.txt"));
+        }
         None => {
             tui::run_interactive().await?;
         }

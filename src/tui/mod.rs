@@ -21,7 +21,7 @@ fn exec_tui_sh() -> Result<()> {
         .arg(&current_exe)
         .status()?;
 
-    drop(tmpfile);
+    drop(tmpfile); // keep alive until here
 
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
@@ -34,6 +34,7 @@ pub async fn run_interactive() -> Result<()> {
 }
 
 pub async fn run_settings() -> Result<()> {
+    // Open config file in $EDITOR, creating it first if needed
     let path = crate::config::config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
