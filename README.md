@@ -5,6 +5,12 @@ Jotform developer productivity CLI — syncs forks with upstream and tracks Time
 ## Installation
 
 ```sh
+./install.sh --prefix /usr/local
+```
+
+Or build from source:
+
+```sh
 cargo build --release
 sudo cp target/release/jotmate /usr/local/bin/
 ```
@@ -59,4 +65,3 @@ github_base = "/Users/you/Documents/Github"
 ```
 
 TimeDoctor credentials are stored in the system keychain (macOS Keychain / Linux secret-service).
-
