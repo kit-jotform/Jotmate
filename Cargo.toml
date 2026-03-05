@@ -23,6 +23,7 @@ thiserror   = "2.0"
 rpassword   = "7.3"
 tempfile    = "3.14"
 futures     = "0.3"
+crossterm   = "0.29"
 
 [profile.release]
 opt-level = 3
