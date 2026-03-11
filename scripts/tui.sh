@@ -248,7 +248,7 @@ show_main_menu() {
         "Sync              ─  Sync repos to upstream" \
         "Time Doctor       ─  Track your work hours" \
         "Settings          ─  Configure jotmate" \
-        "Exit")" || choice="Exit"
+        "Exit")" || { MAIN_MENU_CHOICE="Exit"; return; }
 
     MAIN_MENU_CHOICE="$choice"
 }
@@ -275,17 +275,124 @@ run_time() {
     show_done_screen "Time Doctor" || return 1
 }
 
-# ── Run Settings ─────────────────────────────────────────────
+# ── Settings helpers ──────────────────────────────────────────
+_settings_get_field() {
+    "$JOTMATE_BIN" _settings-get 2>/dev/null | grep "^${1}=" | cut -d= -f2-
+}
+
+_settings_repo_names() {
+    "$JOTMATE_BIN" _settings-get 2>/dev/null \
+        | grep "^repo\." | sed 's/^repo\.\([^.]*\)\..*/\1/' | sort -u
+}
+
+# ── Run Settings ──────────────────────────────────────────────
 run_settings() {
-    leave_alt_screen
-    show_cursor
-    "$JOTMATE_BIN" settings
+    while true; do
+        show_tool_header "Settings" "Configure jotmate"
+        show_cursor
+
+        # Read current values
+        local sync_all use_cache
+        sync_all="$(_settings_get_field sync_all_by_default)"
+        use_cache="$(_settings_get_field use_cache)"
+
+        local sa_badge uc_badge
+        [[ "$sync_all" == "true" ]] && sa_badge="ON " || sa_badge="OFF"
+        [[ "$use_cache" == "true"  ]] && uc_badge="ON " || uc_badge="OFF"
+
+        # Build repo rows
+        local repo_items=()
+        local name
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            local enabled url
+            enabled="$(_settings_get_field "repo.${name}.enabled")"
+            url="$(_settings_get_field "repo.${name}.url")"
+            local badge
+            [[ "$enabled" == "true" ]] && badge="ON " || badge="OFF"
+            repo_items+=("[${badge}]  ${name}  <${url}>")
+        done < <(_settings_repo_names)
+
+        local choice
+        choice="$(gum choose \
+            --header "  SETTINGS  (↑↓ navigate · Enter select · Esc back)" \
+            --header.foreground "$C_SECONDARY" \
+            --header.bold \
+            --cursor "  ▸ " \
+            --cursor.foreground "$C_PRIMARY" \
+            --selected.foreground "$C_ACCENT" \
+            --selected.bold \
+            "[${sa_badge}]  Sync all by default  (--sync-all)" \
+            "[${uc_badge}]  Use repo path cache" \
+            "── Upstream Repositories ───────────────────────" \
+            "${repo_items[@]}" \
+            "  + Add new upstream repository" \
+            "  ← Back" \
+        )" || exit 130
+
+        case "$choice" in
+            *"Sync all by default"*)
+                "$JOTMATE_BIN" _settings-toggle sync_all_by_default >/dev/null
+                ;;
+            *"Use repo path cache"*)
+                "$JOTMATE_BIN" _settings-toggle use_cache >/dev/null
+                ;;
+            *"Add new upstream"*)
+                local new_url new_name
+                new_url="$(gum input --prompt "URL: " --placeholder "https://github.com/org/repo.git")" || continue
+                [[ -z "$new_url" ]] && continue
+                local default_name
+                default_name="$(echo "$new_url" | sed 's|/$||;s|\.git$||;s|.*/||')"
+                new_name="$(gum input --prompt "Name: " --placeholder "$default_name" --value "$default_name")" || continue
+                [[ -z "$new_name" ]] && continue
+                "$JOTMATE_BIN" _settings-add-repo "$new_url" "$new_name" \
+                    && echo "" \
+                    || gum style --foreground "$C_ACCENT" "Error adding repo"
+                ;;
+            "── Upstream"*)
+                continue
+                ;;
+            *"← Back"|"")
+                break
+                ;;
+            *)
+                # Repo row selected — extract name from "[ON/OFF]  name  <url>"
+                local repo_name
+                repo_name="$(echo "$choice" | sed 's/^\[...\]  //;s/  <.*//')"
+                [[ -z "$repo_name" ]] && continue
+
+                local action
+                action="$(gum choose \
+                    --header "  ${repo_name}  — choose action" \
+                    --header.foreground "$C_SECONDARY" \
+                    --cursor "  ▸ " \
+                    --cursor.foreground "$C_PRIMARY" \
+                    "Toggle on/off" \
+                    "Remove" \
+                    "Cancel" \
+                )" || action=""
+
+                case "$action" in
+                    "Toggle on/off")
+                        "$JOTMATE_BIN" _settings-toggle-repo "$repo_name" >/dev/null
+                        ;;
+                    "Remove")
+                        if gum confirm "Remove '${repo_name}' from upstream repos?"; then
+                            "$JOTMATE_BIN" _settings-remove-repo "$repo_name" >/dev/null
+                        fi
+                        ;;
+                esac
+                ;;
+        esac
+    done
+
     hide_cursor
 }
 
 # ── Main loop ─────────────────────────────────────────────────
 main() {
     hide_cursor
+    trap 'tui_exit; exit 130' INT TERM
     trap 'tui_exit' EXIT
 
     while true; do

@@ -18,6 +18,21 @@ pub enum Commands {
     /// Print the embedded ANSI icon (internal use)
     #[command(hide = true, name = "_icon")]
     Icon,
+    /// Print current settings as key=value lines (internal use)
+    #[command(hide = true, name = "_settings-get")]
+    SettingsGet,
+    /// Toggle a boolean setting (internal use)
+    #[command(hide = true, name = "_settings-toggle")]
+    SettingsToggle(SettingsToggleArgs),
+    /// Add an upstream repo (internal use)
+    #[command(hide = true, name = "_settings-add-repo")]
+    SettingsAddRepo(SettingsAddRepoArgs),
+    /// Remove an upstream repo by name (internal use)
+    #[command(hide = true, name = "_settings-remove-repo")]
+    SettingsRemoveRepo(SettingsRemoveRepoArgs),
+    /// Toggle enabled flag on an upstream repo by name (internal use)
+    #[command(hide = true, name = "_settings-toggle-repo")]
+    SettingsToggleRepo(SettingsRemoveRepoArgs),
 }
 
 #[derive(Args, Clone, Debug, Default)]
@@ -29,6 +44,23 @@ pub struct SyncArgs {
     /// Force sync all repos regardless of upstream diff
     #[arg(long)]
     pub sync_all: bool,
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct SettingsToggleArgs {
+    /// Field name: sync_all_by_default | use_cache
+    pub field: String,
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct SettingsAddRepoArgs {
+    pub url: String,
+    pub name: String,
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct SettingsRemoveRepoArgs {
+    pub name: String,
 }
 
 #[derive(Args, Clone, Debug, Default)]

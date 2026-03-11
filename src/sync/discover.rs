@@ -4,22 +4,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::cache::{self, RepoPathsCache, KNOWN_PROJECTS};
+use super::cache::{self, RepoPathsCache};
+use crate::config::UpstreamRepo;
 use crate::error::AppError;
-
-const KNOWN_UPSTREAMS: &[(&str, &str)] = &[
-    ("https://github.com/jotform/frontend.git", "frontend"),
-    ("https://github.com/jotform/vendors.git", "vendors"),
-    ("https://github.com/jotform/backend.git", "backend"),
-    ("https://github.com/jotform/Jotform3.git", "Jotform3"),
-    ("https://github.com/jotform/core.git", "core"),
-    // Also match SSH remotes
-    ("git@github.com:jotform/frontend.git", "frontend"),
-    ("git@github.com:jotform/vendors.git", "vendors"),
-    ("git@github.com:jotform/backend.git", "backend"),
-    ("git@github.com:jotform/Jotform3.git", "Jotform3"),
-    ("git@github.com:jotform/core.git", "core"),
-];
 
 pub fn discover_all_git_repos() -> Result<Vec<PathBuf>> {
     let home = dirs::home_dir().context("Cannot determine home directory")?;
@@ -67,30 +54,58 @@ pub fn get_upstream_url(repo_path: &Path) -> Option<String> {
     None
 }
 
-pub fn match_repos_to_projects(repo_roots: &[PathBuf]) -> Result<HashMap<String, PathBuf>> {
+/// Build a lookup map from (normalized URL → project name) for enabled repos,
+/// including SSH variants of HTTPS URLs.
+pub fn build_upstream_map(repos: &[UpstreamRepo]) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for repo in repos.iter().filter(|r| r.enabled) {
+        let url = repo.url.trim_end_matches('/').trim_end_matches(".git");
+        // HTTPS form
+        map.insert(format!("{}.git", url), repo.name.clone());
+        map.insert(url.to_string(), repo.name.clone());
+
+        // Derive SSH form from HTTPS: https://github.com/org/repo → git@github.com:org/repo
+        if let Some(rest) = repo.url.strip_prefix("https://") {
+            if let Some(slash) = rest.find('/') {
+                let host = &rest[..slash];
+                let path = rest[slash + 1..].trim_end_matches('/').trim_end_matches(".git");
+                let ssh = format!("git@{}:{}", host, path);
+                map.insert(format!("{}.git", ssh), repo.name.clone());
+                map.insert(ssh, repo.name.clone());
+            }
+        }
+    }
+    map
+}
+
+pub fn match_repos_to_projects(
+    repo_roots: &[PathBuf],
+    upstream_repos: &[UpstreamRepo],
+) -> Result<HashMap<String, PathBuf>> {
+    let upstream_map = build_upstream_map(upstream_repos);
+    let expected_names: Vec<&str> = upstream_repos
+        .iter()
+        .filter(|r| r.enabled)
+        .map(|r| r.name.as_str())
+        .collect();
+
     let mut found: HashMap<String, PathBuf> = HashMap::new();
 
     for repo_path in repo_roots {
         if let Some(url) = get_upstream_url(repo_path) {
             let url_trimmed = url.trim_end_matches('/');
-            for (upstream_url, project_name) in KNOWN_UPSTREAMS {
-                if url_trimmed == *upstream_url || url_trimmed == upstream_url.trim_end_matches(".git") {
-                    found
-                        .entry(project_name.to_string())
-                        .or_insert_with(|| repo_path.clone());
-                    break;
-                }
+            if let Some(name) = upstream_map.get(url_trimmed) {
+                found.entry(name.clone()).or_insert_with(|| repo_path.clone());
             }
         }
-        // Stop early if all found
-        if found.len() == KNOWN_PROJECTS.len() {
+        if found.len() == expected_names.len() {
             break;
         }
     }
 
-    let missing: Vec<&str> = KNOWN_PROJECTS
+    let missing: Vec<&str> = expected_names
         .iter()
-        .filter(|p| !found.contains_key(**p))
+        .filter(|n| !found.contains_key(**n))
         .copied()
         .collect();
 
@@ -105,12 +120,12 @@ pub fn match_repos_to_projects(repo_roots: &[PathBuf]) -> Result<HashMap<String,
     Ok(found)
 }
 
-pub fn discover_and_cache() -> Result<RepoPathsCache> {
+pub fn discover_and_cache(upstream_repos: &[UpstreamRepo]) -> Result<RepoPathsCache> {
     println!("Discovering git repositories (this may take a moment)...");
     let repos = discover_all_git_repos()?;
     println!("Found {} git repos, matching against known upstreams...", repos.len());
 
-    let paths = match_repos_to_projects(&repos)?;
+    let paths = match_repos_to_projects(&repos, upstream_repos)?;
 
     println!("All repositories located:");
     for (project, path) in &paths {

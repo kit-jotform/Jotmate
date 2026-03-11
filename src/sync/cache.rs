@@ -6,8 +6,6 @@ use std::path::{Path, PathBuf};
 
 const CACHE_VERSION: u32 = 1;
 
-pub const KNOWN_PROJECTS: &[&str] = &["Jotform3", "vendors", "core", "backend", "frontend"];
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RepoPathsCache {
     pub version: u32,
@@ -47,9 +45,10 @@ pub fn save(cache: &RepoPathsCache) -> Result<()> {
     Ok(())
 }
 
-pub fn is_valid(cache: &RepoPathsCache) -> bool {
-    for project in KNOWN_PROJECTS {
-        match cache.paths.get(*project) {
+/// Returns true if all expected project names exist in the cache and their paths are valid.
+pub fn is_valid(cache: &RepoPathsCache, expected_names: &[&str]) -> bool {
+    for name in expected_names {
+        match cache.paths.get(*name) {
             Some(p) if p.exists() => {}
             _ => return false,
         }

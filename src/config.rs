@@ -12,13 +12,54 @@ pub struct Config {
     pub time: TimeConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpstreamRepo {
+    pub url: String,
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl UpstreamRepo {
+    pub fn new(url: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { url: url.into(), name: name.into(), enabled: true }
+    }
+}
+
+fn default_upstream_repos() -> Vec<UpstreamRepo> {
+    vec![
+        UpstreamRepo::new("https://github.com/jotform/frontend.git", "frontend"),
+        UpstreamRepo::new("https://github.com/jotform/vendors.git", "vendors"),
+        UpstreamRepo::new("https://github.com/jotform/backend.git", "backend"),
+        UpstreamRepo::new("https://github.com/jotform/Jotform3.git", "Jotform3"),
+        UpstreamRepo::new("https://github.com/jotform/core.git", "core"),
+    ]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConfig {
+    /// Upstream repositories to sync (URL + name + enabled flag)
+    #[serde(default = "default_upstream_repos")]
+    pub upstream_repos: Vec<UpstreamRepo>,
     /// Default projects to sync when --only is not passed
     pub default_only: Option<Vec<String>>,
     /// If true, run with --sync-all by default
     #[serde(default)]
-    pub default_sync_all: bool,
+    pub sync_all_by_default: bool,
+    /// If true, use the repo path cache; if false, always rediscover
+    #[serde(default = "default_true")]
+    pub use_cache: bool,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            upstream_repos: default_upstream_repos(),
+            default_only: None,
+            sync_all_by_default: false,
+            use_cache: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
